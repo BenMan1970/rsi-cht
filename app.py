@@ -3,7 +3,6 @@ import yfinance as yf
 import pandas as pd
 import numpy as np
 from datetime import datetime
-from concurrent.futures import ThreadPoolExecutor
 import warnings
 warnings.filterwarnings('ignore')
 
@@ -142,34 +141,30 @@ def analyze_pair(pair):
         row_data[tf] = rsi_value
     return row_data
 
-
 progress_bar = st.progress(0)
 status_text = st.empty()
 
 if st.button("🔄 Relancer l’analyse"):
     st.experimental_rerun()
 
+progress_bar = st.progress(0)
+status_text = st.empty()
+results = []
+
 with st.spinner("📡 Analyse en cours des paires..."):
     with ThreadPoolExecutor() as executor:
-        results = list(executor.map(analyze_pair, filtered_pairs))
+        futures = {executor.submit(analyze_pair, pair): pair for pair in filtered_pairs}
+        total = len(futures)
+        for i, future in enumerate(as_completed(futures)):
+            pair = futures[future]
+            result = future.result()
+            results.append(result)
+            status_text.text(f"Analyse en cours: {pair} ({i+1}/{total})")
+            progress_bar.progress((i + 1) / total)
 
+progress_bar.empty()
+status_text.empty()
 
-# Suppression ancienne boucle séquentielle
-# for i, pair in enumerate(filtered_pairs):
-    status_text.text(f"Analyse en cours: {pair} ({i+1}/{total_pairs})")
-    progress_bar.progress((i + 1) / total_pairs)
-    
-    row_data = {'Symbol': pair}
-    
-    for tf in timeframes:
-        if tf in ['M15', 'M30']:
-            rsi_value = np.random.uniform(25, 75)  # Simulation pour M15/M30
-        else:
-            data = fetch_forex_data(pair, tf)
-            rsi_value = calculate_rsi(data, period=10) if data is not None else np.nan
-        row_data[tf] = rsi_value
-    
-    results.append(row_data)
 
 # Suppression des éléments de progression
 progress_bar.empty()
@@ -243,8 +238,3 @@ st.markdown("---")
 st.markdown("*Développé avec Streamlit | Données Yahoo Finance | RSI OHLC4 Période 10*")
 
 
-
-# Export CSV
-df_export = pd.DataFrame(results)
-csv = df_export.to_csv(index=False).encode('utf-8')
-st.download_button("📥 Télécharger les résultats (CSV)", data=csv, file_name="rsi_forex.csv", mime="text/csv")
